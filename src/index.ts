@@ -1,53 +1,72 @@
 export default {
   async fetch(request, env) {
     let prompt;
-    let model;
-    let num_steps = 20; // Valor por defecto
-    let height = 2048; // Valor por defecto
-    let width = 2048; // Valor por defecto
+    let model = "@cf/stabilityai/stable-diffusion-xl-base-1.0"; // Modelo por defecto
+    let num_steps = 20;
+    let height = 2048;
+    let width = 2048;
 
     if (request.method === "POST") {
       try {
         const body = await request.json();
         prompt = body.prompt;
-        model = body.model || "@cf/stabilityai/stable-diffusion-xl-base-1.0"; // Modelo por defecto
-
-        // Verificar si los valores existen en la solicitud y asignarlos
-        if (body.num_steps) num_steps = Math.min(body.num_steps, 20);
-        if (body.height) height = Math.min(Math.max(body.height, 256), 2048);
-        if (body.width) width = Math.min(Math.max(body.width, 256), 2048);
+        model = body.model || model;
+        
+        // Asegurar que los valores sean números y dentro de los límites permitidos
+        if (typeof body.num_steps === "number") {
+          num_steps = Math.min(Math.max(body.num_steps, 1), 20);
+        }
+        if (typeof body.height === "number") {
+          height = Math.min(Math.max(body.height, 256), 2048);
+        }
+        if (typeof body.width === "number") {
+          width = Math.min(Math.max(body.width, 256), 2048);
+        }
       } catch (e) {
         return new Response("Invalid JSON body", { status: 400 });
       }
     } else {
       const url = new URL(request.url);
       prompt = url.searchParams.get("prompt");
-      model = url.searchParams.get("model") || "@cf/stabilityai/stable-diffusion-xl-base-1.0";
+      model = url.searchParams.get("model") || model;
 
-      // Parámetros opcionales en la URL
-      num_steps = Math.min(parseInt(url.searchParams.get("num_steps")) || 20, 20);
-      height = Math.min(Math.max(parseInt(url.searchParams.get("height")) || 2048, 256), 2048);
-      width = Math.min(Math.max(parseInt(url.searchParams.get("width")) || 2048, 256), 2048);
+      // Convertir y validar parámetros de la URL
+      const urlNumSteps = parseInt(url.searchParams.get("num_steps"));
+      if (!isNaN(urlNumSteps)) {
+        num_steps = Math.min(Math.max(urlNumSteps, 1), 20);
+      }
+
+      const urlHeight = parseInt(url.searchParams.get("height"));
+      if (!isNaN(urlHeight)) {
+        height = Math.min(Math.max(urlHeight, 256), 2048);
+      }
+
+      const urlWidth = parseInt(url.searchParams.get("width"));
+      if (!isNaN(urlWidth)) {
+        width = Math.min(Math.max(urlWidth, 256), 2048);
+      }
     }
 
     if (!prompt) {
       return new Response("Missing 'prompt' parameter", { status: 400 });
     }
 
-    const inputs = { prompt, num_steps, height, width };
+    // Construcción de la solicitud a Stability AI
+    const inputs = {
+      prompt,
+      num_steps,
+      height,
+      width,
+    };
 
     try {
       const response = await env.AI.run(model, inputs);
-
+      
       return new Response(response, {
-        headers: {
-          "content-type": "image/png",
-        },
+        headers: { "content-type": "image/png" },
       });
     } catch (error) {
-      return new Response(`Error generating image: ${error.message}`, {
-        status: 500,
-      });
+      return new Response(`Error generating image: ${error}`, { status: 500 });
     }
   },
 };
