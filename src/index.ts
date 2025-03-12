@@ -5,14 +5,17 @@ export default {
     let num_steps = 20;
     let height = 2048;
     let width = 2048;
+    let negative_prompt = ""; // Prompt negativo por defecto
+    let guidance = 7.5; // Valor por defecto
+    let seed = null; // Seed opcional
 
     if (request.method === "POST") {
       try {
         const body = await request.json();
         prompt = body.prompt;
         model = body.model || model;
-        
-        // Asegurar que los valores sean números y dentro de los límites permitidos
+
+        // Validaciones de valores numéricos dentro de sus límites
         if (typeof body.num_steps === "number") {
           num_steps = Math.min(Math.max(body.num_steps, 1), 20);
         }
@@ -21,6 +24,17 @@ export default {
         }
         if (typeof body.width === "number") {
           width = Math.min(Math.max(body.width, 256), 2048);
+        }
+        if (typeof body.guidance === "number") {
+          guidance = Math.min(Math.max(body.guidance, 0), 20);
+        }
+        if (typeof body.seed === "number") {
+          seed = body.seed;
+        }
+
+        // Prompt negativo si se proporciona
+        if (typeof body.negative_prompt === "string") {
+          negative_prompt = body.negative_prompt;
         }
       } catch (e) {
         return new Response("Invalid JSON body", { status: 400 });
@@ -45,6 +59,21 @@ export default {
       if (!isNaN(urlWidth)) {
         width = Math.min(Math.max(urlWidth, 256), 2048);
       }
+
+      const urlGuidance = parseFloat(url.searchParams.get("guidance"));
+      if (!isNaN(urlGuidance)) {
+        guidance = Math.min(Math.max(urlGuidance, 0), 20);
+      }
+
+      const urlSeed = parseInt(url.searchParams.get("seed"));
+      if (!isNaN(urlSeed)) {
+        seed = urlSeed;
+      }
+
+      const urlNegativePrompt = url.searchParams.get("negative_prompt");
+      if (urlNegativePrompt) {
+        negative_prompt = urlNegativePrompt;
+      }
     }
 
     if (!prompt) {
@@ -54,14 +83,21 @@ export default {
     // Construcción de la solicitud a Stability AI
     const inputs = {
       prompt,
+      negative_prompt,
       num_steps,
       height,
       width,
+      guidance,
     };
+
+    // Solo agregar 'seed' si fue especificado
+    if (seed !== null) {
+      inputs.seed = seed;
+    }
 
     try {
       const response = await env.AI.run(model, inputs);
-      
+
       return new Response(response, {
         headers: { "content-type": "image/png" },
       });
